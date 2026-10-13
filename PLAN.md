@@ -96,8 +96,16 @@
     DB task_flow(utf8mb4, 테이블 없음) 사용. 권한은 task_flow.* 에만 ALL.
   - 확인 결과(2026-10-13): .env 값으로 mariadb -h 127.0.0.1 접속, SELECT 1 → 1, CURRENT_USER task_flow_app@localhost.
   - 남은 일: DB 비밀번호가 약한 임시 값임. 5장(T12)에서 DB를 별도 서버로 옮기기 전에 강한 값으로 변경.
-- [ ] T10: backend/database.py, backend/models.py, backend/init_db.py 생성.
+- [x] T10: backend/database.py, backend/models.py, backend/init_db.py 생성.
   확인: python -m backend.init_db 실행 후 tasks 테이블 확인.
+  - 변경 파일: backend/database.py(.env 읽기, SQLAlchemy 엔진·세션), backend/models.py(tasks 테이블),
+    backend/init_db.py(없는 테이블만 생성), requirements.txt(SQLAlchemy, PyMySQL, python-dotenv)
+  - tasks 컬럼: id INT AUTO_INCREMENT PK, title VARCHAR(100), description VARCHAR(1000) 기본 '',
+    status VARCHAR(20) 기본 TODO, priority VARCHAR(10) 기본 MEDIUM, due_date DATE NULL. status·priority CHECK 제약.
+  - 실행 명령: .venv/bin/pip install -r requirements.txt && .venv/bin/python -m backend.init_db
+  - 확인 결과(2026-10-13): 1회차 "tasks: 생성함", 2회차 "이미 있음(변경 없음)". SQL로 SHOW TABLES에 tasks,
+    SHOW CREATE TABLE로 컬럼·제약·utf8mb4 확인, 행 0개. 잘못된 status INSERT는 CHECK 제약으로 거절(ERROR 4025).
+  - 남은 오류: 없음
 - [ ] T11: API 메모리 저장을 DB로 교체.
   확인: 등록한 행을 SQL로 조회. API 재시작 후 데이터 유지.
 ## 5장: 서버 분리

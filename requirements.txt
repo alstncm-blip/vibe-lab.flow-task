@@ -1,3 +1,8 @@
 # API 서버(T05~): FastAPI 웹 프레임워크와 이를 실행하는 ASGI 서버
 fastapi==0.143.0
 uvicorn[standard]==0.54.0
+
+# DB(T10~): 파이썬에서 테이블·데이터를 다루는 ORM, MariaDB 접속 드라이버, .env 파일 읽기
+SQLAlchemy==2.1.4
+PyMySQL==1.2.3
+python-dotenv==1.2.4
