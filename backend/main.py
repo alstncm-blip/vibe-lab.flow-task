@@ -5,9 +5,19 @@ from datetime import date
 from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Response, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, BeforeValidator, StringConstraints
 
 app = FastAPI(title="Task Flow API")
+
+# 개발 중에는 화면(5500)과 API(8000)의 포트가 달라 CORS 허용이 필요하다.
+# 5장에서 Nginx로 같은 주소에서 제공하면 필요 없다.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5500", "http://127.0.0.1:5500"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Content-Type"],
+)
 
 Status = Literal["TODO", "IN_PROGRESS", "DONE"]
 Priority = Literal["LOW", "MEDIUM", "HIGH"]

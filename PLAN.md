@@ -74,8 +74,21 @@
     다른 항목 불변. 필터 status·priority·q(설명 포함)·조합·결과 없음 [], 잘못된 status 422.
     DELETE 204(본문 없음), 같은 ID 재삭제·없는 ID 404, 삭제 후 등록 시 id 재사용 안 함.
   - 남은 오류: 없음
-- [ ] T08: 프런트엔드 저장 처리를 API 호출로 교체.
+- [x] T08: 프런트엔드 저장 처리를 API 호출로 교체.
   확인: 화면과 curl 목록이 같음. API 중지 시 오류 표시.
+  - 변경 파일: frontend/app.js, frontend/index.html(오류 영역 api-error, 글자 수 제한), frontend/styles.css,
+    backend/main.py(CORS: localhost:5500·127.0.0.1:5500만 허용), API-SPEC.md(CORS 규칙)
+  - 동작: 목록은 시작 시 GET으로 불러오고, 등록·상태 변경·수정·삭제는 서버 응답을 받은 뒤 화면에 반영.
+    검색·필터·지연 표시는 화면에서 계산. 기존 localStorage(task-flow-v1) 데이터는 읽지 않고 지우지도 않음.
+  - 실행 명령: API .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+    화면 python3 -m http.server 5500 --bind 127.0.0.1 --directory frontend
+  - 확인 결과(2026-10-13): curl로 CORS 사전 요청 허용 주소 200·그 외 400. app.js를 Node 가짜 DOM에서 실제 API에 연결해
+    등록·상태 변경·수정·삭제 후 화면 목록과 GET 목록 일치, 삭제 취소 시 유지, 새로고침 후 유지,
+    다른 곳에서 삭제된 항목 수정 시 404 안내 후 목록 갱신, API 중지(fetch 실패 흉내) 시 오류 표시·입력 유지·
+    목록 불러오기 실패 안내와 다시 시도 버튼으로 복구 확인.
+  - 브라우저 확인(사용자): 화면 등록·수정 후 화면과 curl 목록 일치(장보기/진행 중/높음 1건),
+    API 서버 실제 중지 시 새로고침·등록에서 오류 표시와 입력 유지.
+  - 남은 오류: 없음
 ## 4장: DB
 - [ ] T09: mariadb 전용 사용자·DB와 .env 준비. 접속 확인.
 - [ ] T10: backend/database.py, backend/models.py, backend/init_db.py 생성.

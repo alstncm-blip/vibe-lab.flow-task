@@ -92,7 +92,7 @@ select {
   font-size: 14px;
 }
 
-.storage-error {
+.api-error {
   margin: 0 0 16px;
   padding: 10px 12px;
   border: 1px solid #f0b400;
@@ -100,6 +100,21 @@ select {
   background: #fff8e1;
   color: #6d4c00;
   font-size: 14px;
+}
+
+.api-error button {
+  margin-left: 4px;
+  padding: 2px 8px;
+  border: 1px solid #c79100;
+  border-radius: 4px;
+  background: #fff;
+  color: #6d4c00;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .section-title {

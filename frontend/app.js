@@ -1,6 +1,11 @@
-// T04: 할 일 등록·상태 변경·수정·삭제, 설명·우선순위·마감일, 검색·필터·지연 표시.
-// localStorage(task-flow-v1)에 저장하고 복원한다.
-const STORAGE_KEY = "task-flow-v1";
+// T08: 할 일 등록·상태 변경·수정·삭제, 설명·우선순위·마감일, 검색·필터·지연 표시.
+// 데이터는 Task Flow API(API-SPEC.md)에 저장한다.
+
+// 개발 중(5500번 정적 서버)에는 8000번 API로 직접 요청하고,
+// Nginx로 함께 제공할 때(5장)는 같은 주소의 /api를 쓴다.
+const API_BASE =
+  location.port === "5500" ? `${location.protocol}//${location.hostname}:8000/api` : "/api";
+
 const STATUSES = {
   TODO: "할 일",
   IN_PROGRESS: "진행 중",
@@ -11,98 +16,113 @@ const PRIORITIES = {
   MEDIUM: "보통",
   HIGH: "높음",
 };
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const form = document.getElementById("task-form");
 const titleInput = document.getElementById("task-title");
 const descriptionInput = document.getElementById("task-description");
 const priorityInput = document.getElementById("task-priority");
 const dueDateInput = document.getElementById("task-due-date");
+const submitButton = document.getElementById("submit-button");
 const formError = document.getElementById("form-error");
-const storageError = document.getElementById("storage-error");
+const apiError = document.getElementById("api-error");
 const searchInput = document.getElementById("search-input");
 const statusFilter = document.getElementById("status-filter");
 const priorityFilter = document.getElementById("priority-filter");
 const taskList = document.getElementById("task-list");
 const emptyMessage = document.getElementById("empty-message");
 
-// 저장값이 손상됐거나 저장소를 쓸 수 없으면 false가 되고, 이후 저장하지 않는다.
-let canSave = true;
+// 서버에서 받은 목록. 변경은 서버 응답을 받은 뒤에만 반영한다.
+let tasks = [];
+// 처음 목록을 불러오기 전에는 빈 목록 문구를 보여 주지 않는다.
+let loaded = false;
 
-function isValidTask(task) {
-  // T02·T03에서 저장한 항목에는 status·description·priority·dueDate가 없을 수 있다.
-  return (
-    task !== null &&
-    typeof task === "object" &&
-    (typeof task.id === "number" || typeof task.id === "string") &&
-    typeof task.title === "string" &&
-    task.title.trim() !== "" &&
-    (task.status === undefined || Object.hasOwn(STATUSES, task.status)) &&
-    (task.description === undefined || typeof task.description === "string") &&
-    (task.priority === undefined || Object.hasOwn(PRIORITIES, task.priority)) &&
-    (task.dueDate === undefined || task.dueDate === null || DATE_PATTERN.test(task.dueDate))
-  );
+class ApiError extends Error {}
+
+// API 오류 응답(422 등)의 detail을 사람이 읽을 문장으로 바꾼다.
+function describeError(status, body) {
+  if (status === 404) {
+    return "이미 삭제된 할 일입니다. 목록을 새로 불러옵니다.";
+  }
+  if (status === 422 && Array.isArray(body?.detail)) {
+    const fields = body.detail.map((item) => item.loc?.at(-1)).filter(Boolean);
+    return `입력값을 확인하세요 (${[...new Set(fields)].join(", ")}).`;
+  }
+  return `서버 오류가 발생했습니다 (HTTP ${status}).`;
 }
 
-function withDefaults(task) {
-  return {
-    ...task,
-    status: task.status ?? "TODO",
-    description: task.description ?? "",
-    priority: task.priority ?? "MEDIUM",
-    dueDate: task.dueDate ?? null,
-  };
-}
-
-function showStorageError(message) {
-  storageError.textContent = message;
-  storageError.hidden = false;
-}
-
-function loadTasks() {
-  let raw;
+async function request(method, path, body) {
+  let response;
   try {
-    raw = localStorage.getItem(STORAGE_KEY);
+    response = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
   } catch {
-    canSave = false;
-    showStorageError("브라우저 저장소를 사용할 수 없습니다. 이번에 등록한 할 일은 새로고침하면 사라집니다.");
-    return [];
+    throw new ApiError("서버에 연결할 수 없습니다. API 서버가 실행 중인지 확인하세요.");
   }
 
-  if (raw === null) {
-    return [];
+  if (response.status === 204) {
+    return null;
   }
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new ApiError(describeError(response.status, data));
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
 
+function showApiError(message, onRetry) {
+  apiError.replaceChildren(document.createTextNode(message));
+  if (onRetry) {
+    apiError.append(" ", createButton("다시 시도", onRetry));
+  }
+  apiError.hidden = false;
+}
+
+function clearApiError() {
+  apiError.replaceChildren();
+  apiError.hidden = true;
+}
+
+// API 호출을 실행하고, 실패하면 오류를 보여 준다. 성공하면 true.
+async function runApi(action) {
   try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.every(isValidTask)) {
-      return parsed.map(withDefaults);
+    await action();
+    clearApiError();
+    return true;
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      throw error;
     }
-  } catch {
-    // 아래에서 손상된 값으로 처리한다.
+    if (error.status === 404) {
+      // 다른 곳에서 삭제됐으면 서버 목록으로 맞춘다.
+      await loadTasks();
+    }
+    showApiError(error.message);
+    return false;
   }
-
-  // 손상된 저장값은 덮어쓰지 않고 그대로 둔다.
-  canSave = false;
-  showStorageError(
-    `저장된 데이터(${STORAGE_KEY})를 읽을 수 없습니다. 기존 데이터를 보호하기 위해 저장하지 않습니다. ` +
-      "이번에 등록한 할 일은 새로고침하면 사라집니다."
-  );
-  return [];
 }
 
-function saveTasks() {
-  if (!canSave) {
-    return;
-  }
+async function loadTasks() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-  } catch {
-    showStorageError("할 일을 저장하지 못했습니다. 새로고침하면 사라질 수 있습니다.");
+    tasks = await request("GET", "/tasks");
+    loaded = true;
+    clearApiError();
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      throw error;
+    }
+    showApiError(`할 일 목록을 불러오지 못했습니다. ${error.message}`, loadTasks);
   }
+  renderTasks();
 }
 
-const tasks = loadTasks();
+function replaceTask(updated) {
+  tasks = tasks.map((task) => (task.id === updated.id ? updated : task));
+}
 
 function showError(message) {
   formError.textContent = message;
@@ -124,7 +144,7 @@ function today() {
 
 // 마감일이 오늘보다 이전이고 완료되지 않은 할 일은 지연이다.
 function isOverdue(task) {
-  return task.dueDate !== null && task.dueDate < today() && task.status !== "DONE";
+  return task.due_date !== null && task.due_date < today() && task.status !== "DONE";
 }
 
 function matchesFilters(task) {
@@ -152,28 +172,28 @@ function findTask(id) {
   return tasks.find((task) => task.id === id);
 }
 
-function changeStatus(id, status) {
-  const task = findTask(id);
-  if (!task || !Object.hasOwn(STATUSES, status)) {
+async function changeStatus(id, status) {
+  if (!Object.hasOwn(STATUSES, status)) {
     return;
   }
-  task.status = status;
-  saveTasks();
+  await runApi(async () => {
+    replaceTask(await request("PATCH", `/tasks/${id}`, { status }));
+  });
+  // 실패하면 드롭다운을 서버 값으로 되돌린다.
   renderTasks();
 }
 
-function updateTask(id, changes) {
-  const task = findTask(id);
-  if (!task) {
-    return;
+async function updateTask(id, changes) {
+  const ok = await runApi(async () => {
+    replaceTask(await request("PATCH", `/tasks/${id}`, changes));
+  });
+  if (ok) {
+    editingId = null;
+    renderTasks();
   }
-  Object.assign(task, changes);
-  editingId = null;
-  saveTasks();
-  renderTasks();
 }
 
-function deleteTask(id) {
+async function deleteTask(id) {
   const task = findTask(id);
   if (!task) {
     return;
@@ -181,12 +201,13 @@ function deleteTask(id) {
   if (!confirm(`"${task.title}" 할 일을 삭제할까요?`)) {
     return;
   }
-  const index = tasks.findIndex((t) => t.id === id);
-  tasks.splice(index, 1);
-  if (editingId === id) {
+  const ok = await runApi(async () => {
+    await request("DELETE", `/tasks/${id}`);
+    tasks = tasks.filter((t) => t.id !== id);
+  });
+  if (ok && editingId === id) {
     editingId = null;
   }
-  saveTasks();
   renderTasks();
 }
 
@@ -256,8 +277,8 @@ function renderViewItem(item, task) {
   const meta = document.createElement("div");
   meta.className = "task-meta";
   meta.appendChild(createBadge(`우선순위 ${PRIORITIES[task.priority]}`, `priority-${task.priority.toLowerCase()}`));
-  if (task.dueDate !== null) {
-    meta.appendChild(createBadge(`마감 ${task.dueDate}`, "due-date"));
+  if (task.due_date !== null) {
+    meta.appendChild(createBadge(`마감 ${task.due_date}`, "due-date"));
   }
   if (isOverdue(task)) {
     item.classList.add("overdue");
@@ -273,11 +294,13 @@ function renderEditItem(item, task) {
 
   const titleField = document.createElement("input");
   titleField.type = "text";
+  titleField.maxLength = 100;
   titleField.value = task.title;
   titleField.setAttribute("aria-label", "할 일 제목 수정");
 
   const descriptionField = document.createElement("textarea");
   descriptionField.rows = 2;
+  descriptionField.maxLength = 1000;
   descriptionField.value = task.description;
   descriptionField.placeholder = "설명 (선택)";
   descriptionField.setAttribute("aria-label", "설명 수정");
@@ -286,7 +309,7 @@ function renderEditItem(item, task) {
 
   const dueDateField = document.createElement("input");
   dueDateField.type = "date";
-  dueDateField.value = task.dueDate ?? "";
+  dueDateField.value = task.due_date ?? "";
   dueDateField.setAttribute("aria-label", "마감일 수정");
 
   const saveButton = document.createElement("button");
@@ -302,7 +325,7 @@ function renderEditItem(item, task) {
   error.className = "form-error";
   error.hidden = true;
 
-  editForm.addEventListener("submit", (event) => {
+  editForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const title = titleField.value.trim();
     if (title === "") {
@@ -311,12 +334,15 @@ function renderEditItem(item, task) {
       titleField.focus();
       return;
     }
-    updateTask(task.id, {
+    saveButton.disabled = true;
+    await updateTask(task.id, {
       title,
       description: descriptionField.value.trim(),
       priority: priorityField.value,
-      dueDate: dueDateField.value === "" ? null : dueDateField.value,
+      due_date: dueDateField.value === "" ? null : dueDateField.value,
     });
+    // 실패해서 수정 폼이 남아 있으면 다시 저장할 수 있게 한다.
+    saveButton.disabled = false;
   });
   editForm.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -353,10 +379,10 @@ function renderTasks() {
   } else {
     emptyMessage.textContent = "조건에 맞는 할 일이 없습니다.";
   }
-  emptyMessage.hidden = visibleTasks.length > 0;
+  emptyMessage.hidden = !loaded || visibleTasks.length > 0;
 }
 
-form.addEventListener("submit", (event) => {
+form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const title = titleInput.value.trim();
 
@@ -366,20 +392,24 @@ form.addEventListener("submit", (event) => {
     return;
   }
 
-  // 같은 밀리초에 등록해도 id가 겹치지 않게 한다.
-  const maxId = tasks.reduce((max, task) => Math.max(max, Number(task.id) || 0), 0);
-  tasks.push({
-    id: Math.max(Date.now(), maxId + 1),
-    title,
-    status: "TODO",
-    description: descriptionInput.value.trim(),
-    priority: priorityInput.value,
-    dueDate: dueDateInput.value === "" ? null : dueDateInput.value,
+  submitButton.disabled = true;
+  const ok = await runApi(async () => {
+    const created = await request("POST", "/tasks", {
+      title,
+      description: descriptionInput.value.trim(),
+      priority: priorityInput.value,
+      due_date: dueDateInput.value === "" ? null : dueDateInput.value,
+    });
+    tasks = [...tasks, created];
   });
-  saveTasks();
-  clearError();
-  form.reset();
-  titleInput.focus();
+  submitButton.disabled = false;
+
+  // 실패하면 입력값을 남겨 두어 다시 등록할 수 있게 한다.
+  if (ok) {
+    clearError();
+    form.reset();
+    titleInput.focus();
+  }
   renderTasks();
 });
 
@@ -388,3 +418,4 @@ for (const control of [searchInput, statusFilter, priorityFilter]) {
 }
 
 renderTasks();
+loadTasks();

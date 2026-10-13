@@ -9,16 +9,16 @@
 <body>
   <main class="container">
     <h1>Task Flow</h1>
-    <p id="storage-error" class="storage-error" role="alert" hidden></p>
+    <p id="api-error" class="api-error" role="alert" hidden></p>
 
     <form id="task-form" class="task-form" novalidate>
       <div class="form-row">
         <label for="task-title" class="visually-hidden">할 일 제목</label>
-        <input id="task-title" name="title" type="text" placeholder="할 일 제목을 입력하세요" autocomplete="off">
-        <button type="submit">등록</button>
+        <input id="task-title" name="title" type="text" maxlength="100" placeholder="할 일 제목을 입력하세요" autocomplete="off">
+        <button id="submit-button" type="submit">등록</button>
       </div>
       <label for="task-description" class="visually-hidden">설명</label>
-      <textarea id="task-description" name="description" rows="2" placeholder="설명 (선택)"></textarea>
+      <textarea id="task-description" name="description" rows="2" maxlength="1000" placeholder="설명 (선택)"></textarea>
       <div class="form-row">
         <label>
           우선순위
