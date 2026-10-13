@@ -1,5 +1,10 @@
-// T02: 할 일 목록을 localStorage(task-flow-v1)에 저장하고 복원한다.
+// T03: 할 일 등록·상태 변경·수정·삭제. localStorage(task-flow-v1)에 저장하고 복원한다.
 const STORAGE_KEY = "task-flow-v1";
+const STATUSES = {
+  TODO: "할 일",
+  IN_PROGRESS: "진행 중",
+  DONE: "완료",
+};
 
 const form = document.getElementById("task-form");
 const titleInput = document.getElementById("task-title");
@@ -17,7 +22,9 @@ function isValidTask(task) {
     typeof task === "object" &&
     (typeof task.id === "number" || typeof task.id === "string") &&
     typeof task.title === "string" &&
-    task.title.trim() !== ""
+    task.title.trim() !== "" &&
+    // T02에서 저장한 항목에는 status가 없다.
+    (task.status === undefined || Object.hasOwn(STATUSES, task.status))
   );
 }
 
@@ -43,7 +50,7 @@ function loadTasks() {
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.every(isValidTask)) {
-      return parsed;
+      return parsed.map((task) => ({ ...task, status: task.status ?? "TODO" }));
     }
   } catch {
     // 아래에서 손상된 값으로 처리한다.
@@ -81,12 +88,149 @@ function clearError() {
   formError.hidden = true;
 }
 
+// 제목을 수정 중인 항목의 id. 한 번에 한 항목만 수정한다.
+let editingId = null;
+
+function findTask(id) {
+  return tasks.find((task) => task.id === id);
+}
+
+function changeStatus(id, status) {
+  const task = findTask(id);
+  if (!task || !Object.hasOwn(STATUSES, status)) {
+    return;
+  }
+  task.status = status;
+  saveTasks();
+  renderTasks();
+}
+
+function updateTitle(id, title) {
+  const task = findTask(id);
+  if (!task) {
+    return;
+  }
+  task.title = title;
+  editingId = null;
+  saveTasks();
+  renderTasks();
+}
+
+function deleteTask(id) {
+  const task = findTask(id);
+  if (!task) {
+    return;
+  }
+  if (!confirm(`"${task.title}" 할 일을 삭제할까요?`)) {
+    return;
+  }
+  const index = tasks.findIndex((t) => t.id === id);
+  tasks.splice(index, 1);
+  if (editingId === id) {
+    editingId = null;
+  }
+  saveTasks();
+  renderTasks();
+}
+
+function createButton(label, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function renderViewItem(item, task) {
+  const title = document.createElement("span");
+  title.className = "task-title";
+  // 사용자 입력은 HTML이 아닌 글자로 표시한다.
+  title.textContent = task.title;
+  if (task.status === "DONE") {
+    title.classList.add("done");
+  }
+
+  const statusSelect = document.createElement("select");
+  statusSelect.setAttribute("aria-label", "상태");
+  for (const [value, label] of Object.entries(STATUSES)) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    statusSelect.appendChild(option);
+  }
+  statusSelect.value = task.status;
+  statusSelect.addEventListener("change", () => changeStatus(task.id, statusSelect.value));
+
+  const actions = document.createElement("div");
+  actions.className = "task-actions";
+  actions.append(
+    statusSelect,
+    createButton("수정", () => {
+      editingId = task.id;
+      renderTasks();
+    }),
+    createButton("삭제", () => deleteTask(task.id))
+  );
+
+  item.append(title, actions);
+}
+
+function renderEditItem(item, task) {
+  const editForm = document.createElement("form");
+  editForm.className = "edit-form";
+  editForm.noValidate = true;
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = task.title;
+  input.setAttribute("aria-label", "할 일 제목 수정");
+
+  const saveButton = document.createElement("button");
+  saveButton.type = "submit";
+  saveButton.textContent = "저장";
+
+  const cancel = () => {
+    editingId = null;
+    renderTasks();
+  };
+
+  const error = document.createElement("p");
+  error.className = "form-error";
+  error.hidden = true;
+
+  editForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const title = input.value.trim();
+    if (title === "") {
+      error.textContent = "제목을 입력하세요.";
+      error.hidden = false;
+      input.focus();
+      return;
+    }
+    updateTitle(task.id, title);
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      cancel();
+    }
+  });
+
+  editForm.append(input, saveButton, createButton("취소", cancel));
+  item.append(editForm, error);
+  // 목록에 붙은 뒤 포커스를 준다.
+  queueMicrotask(() => input.focus());
+}
+
 function renderTasks() {
   taskList.replaceChildren();
   for (const task of tasks) {
     const item = document.createElement("li");
-    // 사용자 입력은 HTML이 아닌 글자로 표시한다.
-    item.textContent = task.title;
+    if (task.id === editingId) {
+      item.className = "editing";
+      renderEditItem(item, task);
+    } else {
+      renderViewItem(item, task);
+    }
     taskList.appendChild(item);
   }
   emptyMessage.hidden = tasks.length > 0;
@@ -104,7 +248,7 @@ form.addEventListener("submit", (event) => {
 
   // 같은 밀리초에 등록해도 id가 겹치지 않게 한다.
   const maxId = tasks.reduce((max, task) => Math.max(max, Number(task.id) || 0), 0);
-  tasks.push({ id: Math.max(Date.now(), maxId + 1), title });
+  tasks.push({ id: Math.max(Date.now(), maxId + 1), title, status: "TODO" });
   saveTasks();
   clearError();
   titleInput.value = "";
