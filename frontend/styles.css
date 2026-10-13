@@ -52,6 +52,16 @@ h1 {
   font-size: 14px;
 }
 
+.storage-error {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid #f0b400;
+  border-radius: 6px;
+  background: #fff8e1;
+  color: #6d4c00;
+  font-size: 14px;
+}
+
 .task-list {
   list-style: none;
   margin: 24px 0 0;
