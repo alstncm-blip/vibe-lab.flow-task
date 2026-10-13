@@ -90,7 +90,12 @@
     API 서버 실제 중지 시 새로고침·등록에서 오류 표시와 입력 유지.
   - 남은 오류: 없음
 ## 4장: DB
-- [ ] T09: mariadb 전용 사용자·DB와 .env 준비. 접속 확인.
+- [x] T09: mariadb 전용 사용자·DB와 .env 준비. 접속 확인.
+  - 변경 파일: .env.example(변수 이름·가짜 값), .env(실제 값, Git 제외·권한 600)
+  - DB 구성: 기존 MariaDB 11.8(127.0.0.1:3306)에 사용자가 미리 만든 전용 사용자 task_flow_app@localhost와
+    DB task_flow(utf8mb4, 테이블 없음) 사용. 권한은 task_flow.* 에만 ALL.
+  - 확인 결과(2026-10-13): .env 값으로 mariadb -h 127.0.0.1 접속, SELECT 1 → 1, CURRENT_USER task_flow_app@localhost.
+  - 남은 일: DB 비밀번호가 약한 임시 값임. 5장(T12)에서 DB를 별도 서버로 옮기기 전에 강한 값으로 변경.
 - [ ] T10: backend/database.py, backend/models.py, backend/init_db.py 생성.
   확인: python -m backend.init_db 실행 후 tasks 테이블 확인.
 - [ ] T11: API 메모리 저장을 DB로 교체.
