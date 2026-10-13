@@ -19,20 +19,60 @@ h1 {
   margin-bottom: 24px;
 }
 
-.task-form {
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.task-form,
+.edit-form {
   display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.task-form input {
-  flex: 1;
-  padding: 10px 12px;
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-row label,
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #555;
+}
+
+.task-form input,
+.task-form textarea,
+.task-form select,
+.toolbar input,
+.toolbar select {
+  padding: 8px 10px;
   border: 1px solid #ccc;
   border-radius: 6px;
+  background: #fff;
+  font-size: 15px;
+}
+
+.task-form #task-title {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
   font-size: 16px;
 }
 
-.task-form button {
+.task-form textarea,
+.edit-form textarea {
+  resize: vertical;
+}
+
+.task-form button[type="submit"] {
   padding: 10px 16px;
   border: none;
   border-radius: 6px;
@@ -42,7 +82,7 @@ h1 {
   cursor: pointer;
 }
 
-.task-form button:hover {
+.task-form button[type="submit"]:hover {
   background: #2259c7;
 }
 
@@ -62,19 +102,44 @@ h1 {
   font-size: 14px;
 }
 
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.toolbar input {
+  flex: 1;
+  min-width: 160px;
+}
+
 .task-list {
   list-style: none;
-  margin: 24px 0 0;
+  margin: 16px 0 0;
   padding: 0;
 }
 
 .task-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 12px;
   margin-bottom: 8px;
   background: #fff;
   border: 1px solid #e0e0e0;
   border-radius: 6px;
   overflow-wrap: anywhere;
+}
+
+.task-list li.overdue {
+  border-left: 4px solid #c62828;
+}
+
+.task-header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -84,6 +149,7 @@ h1 {
 .task-title {
   flex: 1;
   min-width: 0;
+  font-weight: 600;
 }
 
 .task-title.done {
@@ -91,19 +157,50 @@ h1 {
   text-decoration: line-through;
 }
 
-.task-actions,
-.edit-form {
+.task-description {
+  margin: 0;
+  color: #555;
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+.task-actions {
   display: flex;
   gap: 6px;
 }
 
-.edit-form {
-  flex: 1;
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.edit-form input {
-  flex: 1;
-  min-width: 0;
+.badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef0f3;
+  color: #555;
+  font-size: 12px;
+}
+
+.badge.priority-high {
+  background: #fde7e7;
+  color: #b3261e;
+}
+
+.badge.priority-low {
+  background: #e8f4ea;
+  color: #2e6b35;
+}
+
+.badge.overdue-badge {
+  background: #c62828;
+  color: #fff;
+  font-weight: 600;
+}
+
+.edit-form input,
+.edit-form textarea {
   padding: 6px 8px;
   border: 1px solid #ccc;
   border-radius: 4px;
@@ -111,7 +208,6 @@ h1 {
 }
 
 .task-list li .form-error {
-  flex-basis: 100%;
   margin: 0;
 }
 

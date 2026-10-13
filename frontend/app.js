@@ -1,15 +1,28 @@
-// T03: 할 일 등록·상태 변경·수정·삭제. localStorage(task-flow-v1)에 저장하고 복원한다.
+// T04: 할 일 등록·상태 변경·수정·삭제, 설명·우선순위·마감일, 검색·필터·지연 표시.
+// localStorage(task-flow-v1)에 저장하고 복원한다.
 const STORAGE_KEY = "task-flow-v1";
 const STATUSES = {
   TODO: "할 일",
   IN_PROGRESS: "진행 중",
   DONE: "완료",
 };
+const PRIORITIES = {
+  LOW: "낮음",
+  MEDIUM: "보통",
+  HIGH: "높음",
+};
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const form = document.getElementById("task-form");
 const titleInput = document.getElementById("task-title");
+const descriptionInput = document.getElementById("task-description");
+const priorityInput = document.getElementById("task-priority");
+const dueDateInput = document.getElementById("task-due-date");
 const formError = document.getElementById("form-error");
 const storageError = document.getElementById("storage-error");
+const searchInput = document.getElementById("search-input");
+const statusFilter = document.getElementById("status-filter");
+const priorityFilter = document.getElementById("priority-filter");
 const taskList = document.getElementById("task-list");
 const emptyMessage = document.getElementById("empty-message");
 
@@ -17,15 +30,28 @@ const emptyMessage = document.getElementById("empty-message");
 let canSave = true;
 
 function isValidTask(task) {
+  // T02·T03에서 저장한 항목에는 status·description·priority·dueDate가 없을 수 있다.
   return (
     task !== null &&
     typeof task === "object" &&
     (typeof task.id === "number" || typeof task.id === "string") &&
     typeof task.title === "string" &&
     task.title.trim() !== "" &&
-    // T02에서 저장한 항목에는 status가 없다.
-    (task.status === undefined || Object.hasOwn(STATUSES, task.status))
+    (task.status === undefined || Object.hasOwn(STATUSES, task.status)) &&
+    (task.description === undefined || typeof task.description === "string") &&
+    (task.priority === undefined || Object.hasOwn(PRIORITIES, task.priority)) &&
+    (task.dueDate === undefined || task.dueDate === null || DATE_PATTERN.test(task.dueDate))
   );
+}
+
+function withDefaults(task) {
+  return {
+    ...task,
+    status: task.status ?? "TODO",
+    description: task.description ?? "",
+    priority: task.priority ?? "MEDIUM",
+    dueDate: task.dueDate ?? null,
+  };
 }
 
 function showStorageError(message) {
@@ -50,7 +76,7 @@ function loadTasks() {
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.every(isValidTask)) {
-      return parsed.map((task) => ({ ...task, status: task.status ?? "TODO" }));
+      return parsed.map(withDefaults);
     }
   } catch {
     // 아래에서 손상된 값으로 처리한다.
@@ -88,7 +114,38 @@ function clearError() {
   formError.hidden = true;
 }
 
-// 제목을 수정 중인 항목의 id. 한 번에 한 항목만 수정한다.
+// 브라우저 기준 오늘 날짜(YYYY-MM-DD).
+function today() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+// 마감일이 오늘보다 이전이고 완료되지 않은 할 일은 지연이다.
+function isOverdue(task) {
+  return task.dueDate !== null && task.dueDate < today() && task.status !== "DONE";
+}
+
+function matchesFilters(task) {
+  const keyword = searchInput.value.trim().toLowerCase();
+  if (
+    keyword !== "" &&
+    !task.title.toLowerCase().includes(keyword) &&
+    !task.description.toLowerCase().includes(keyword)
+  ) {
+    return false;
+  }
+  if (statusFilter.value !== "ALL" && task.status !== statusFilter.value) {
+    return false;
+  }
+  if (priorityFilter.value !== "ALL" && task.priority !== priorityFilter.value) {
+    return false;
+  }
+  return true;
+}
+
+// 내용을 수정 중인 항목의 id. 한 번에 한 항목만 수정한다.
 let editingId = null;
 
 function findTask(id) {
@@ -105,12 +162,12 @@ function changeStatus(id, status) {
   renderTasks();
 }
 
-function updateTitle(id, title) {
+function updateTask(id, changes) {
   const task = findTask(id);
   if (!task) {
     return;
   }
-  task.title = title;
+  Object.assign(task, changes);
   editingId = null;
   saveTasks();
   renderTasks();
@@ -141,7 +198,30 @@ function createButton(label, onClick) {
   return button;
 }
 
+function createSelect(options, value, ariaLabel) {
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", ariaLabel);
+  for (const [optionValue, label] of Object.entries(options)) {
+    const option = document.createElement("option");
+    option.value = optionValue;
+    option.textContent = label;
+    select.appendChild(option);
+  }
+  select.value = value;
+  return select;
+}
+
+function createBadge(text, className) {
+  const badge = document.createElement("span");
+  badge.className = `badge ${className}`;
+  badge.textContent = text;
+  return badge;
+}
+
 function renderViewItem(item, task) {
+  const header = document.createElement("div");
+  header.className = "task-header";
+
   const title = document.createElement("span");
   title.className = "task-title";
   // 사용자 입력은 HTML이 아닌 글자로 표시한다.
@@ -150,15 +230,7 @@ function renderViewItem(item, task) {
     title.classList.add("done");
   }
 
-  const statusSelect = document.createElement("select");
-  statusSelect.setAttribute("aria-label", "상태");
-  for (const [value, label] of Object.entries(STATUSES)) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = label;
-    statusSelect.appendChild(option);
-  }
-  statusSelect.value = task.status;
+  const statusSelect = createSelect(STATUSES, task.status, "상태");
   statusSelect.addEventListener("change", () => changeStatus(task.id, statusSelect.value));
 
   const actions = document.createElement("div");
@@ -171,8 +243,27 @@ function renderViewItem(item, task) {
     }),
     createButton("삭제", () => deleteTask(task.id))
   );
+  header.append(title, actions);
+  item.appendChild(header);
 
-  item.append(title, actions);
+  if (task.description !== "") {
+    const description = document.createElement("p");
+    description.className = "task-description";
+    description.textContent = task.description;
+    item.appendChild(description);
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "task-meta";
+  meta.appendChild(createBadge(`우선순위 ${PRIORITIES[task.priority]}`, `priority-${task.priority.toLowerCase()}`));
+  if (task.dueDate !== null) {
+    meta.appendChild(createBadge(`마감 ${task.dueDate}`, "due-date"));
+  }
+  if (isOverdue(task)) {
+    item.classList.add("overdue");
+    meta.appendChild(createBadge("지연", "overdue-badge"));
+  }
+  item.appendChild(meta);
 }
 
 function renderEditItem(item, task) {
@@ -180,10 +271,23 @@ function renderEditItem(item, task) {
   editForm.className = "edit-form";
   editForm.noValidate = true;
 
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = task.title;
-  input.setAttribute("aria-label", "할 일 제목 수정");
+  const titleField = document.createElement("input");
+  titleField.type = "text";
+  titleField.value = task.title;
+  titleField.setAttribute("aria-label", "할 일 제목 수정");
+
+  const descriptionField = document.createElement("textarea");
+  descriptionField.rows = 2;
+  descriptionField.value = task.description;
+  descriptionField.placeholder = "설명 (선택)";
+  descriptionField.setAttribute("aria-label", "설명 수정");
+
+  const priorityField = createSelect(PRIORITIES, task.priority, "우선순위 수정");
+
+  const dueDateField = document.createElement("input");
+  dueDateField.type = "date";
+  dueDateField.value = task.dueDate ?? "";
+  dueDateField.setAttribute("aria-label", "마감일 수정");
 
   const saveButton = document.createElement("button");
   saveButton.type = "submit";
@@ -200,30 +304,40 @@ function renderEditItem(item, task) {
 
   editForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    const title = input.value.trim();
+    const title = titleField.value.trim();
     if (title === "") {
       error.textContent = "제목을 입력하세요.";
       error.hidden = false;
-      input.focus();
+      titleField.focus();
       return;
     }
-    updateTitle(task.id, title);
+    updateTask(task.id, {
+      title,
+      description: descriptionField.value.trim(),
+      priority: priorityField.value,
+      dueDate: dueDateField.value === "" ? null : dueDateField.value,
+    });
   });
-  input.addEventListener("keydown", (event) => {
+  editForm.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       cancel();
     }
   });
 
-  editForm.append(input, saveButton, createButton("취소", cancel));
+  const row = document.createElement("div");
+  row.className = "form-row";
+  row.append(priorityField, dueDateField, saveButton, createButton("취소", cancel));
+
+  editForm.append(titleField, descriptionField, row);
   item.append(editForm, error);
   // 목록에 붙은 뒤 포커스를 준다.
-  queueMicrotask(() => input.focus());
+  queueMicrotask(() => titleField.focus());
 }
 
 function renderTasks() {
   taskList.replaceChildren();
-  for (const task of tasks) {
+  const visibleTasks = tasks.filter((task) => task.id === editingId || matchesFilters(task));
+  for (const task of visibleTasks) {
     const item = document.createElement("li");
     if (task.id === editingId) {
       item.className = "editing";
@@ -233,7 +347,13 @@ function renderTasks() {
     }
     taskList.appendChild(item);
   }
-  emptyMessage.hidden = tasks.length > 0;
+
+  if (tasks.length === 0) {
+    emptyMessage.textContent = "등록된 할 일이 없습니다.";
+  } else {
+    emptyMessage.textContent = "조건에 맞는 할 일이 없습니다.";
+  }
+  emptyMessage.hidden = visibleTasks.length > 0;
 }
 
 form.addEventListener("submit", (event) => {
@@ -248,12 +368,23 @@ form.addEventListener("submit", (event) => {
 
   // 같은 밀리초에 등록해도 id가 겹치지 않게 한다.
   const maxId = tasks.reduce((max, task) => Math.max(max, Number(task.id) || 0), 0);
-  tasks.push({ id: Math.max(Date.now(), maxId + 1), title, status: "TODO" });
+  tasks.push({
+    id: Math.max(Date.now(), maxId + 1),
+    title,
+    status: "TODO",
+    description: descriptionInput.value.trim(),
+    priority: priorityInput.value,
+    dueDate: dueDateInput.value === "" ? null : dueDateInput.value,
+  });
   saveTasks();
   clearError();
-  titleInput.value = "";
+  form.reset();
   titleInput.focus();
   renderTasks();
 });
+
+for (const control of [searchInput, statusFilter, priorityFilter]) {
+  control.addEventListener("input", renderTasks);
+}
 
 renderTasks();
