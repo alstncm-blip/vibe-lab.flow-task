@@ -45,8 +45,15 @@
   - 브라우저 확인(사용자): 어제 마감 항목 지연 표시, 필터 중 수정 시 해당 항목만 변경, 필터 중 삭제 시 해당 항목만 삭제.
   - 남은 오류: 없음
 ## 3장: API
-- [ ] T05: API-SPEC.md 작성, FastAPI /api/health 구현.
+- [x] T05: API-SPEC.md 작성, FastAPI /api/health 구현.
   확인: curl로 200과 status=ok.
+  - 변경 파일: API-SPEC.md, backend/__init__.py, backend/main.py, requirements.txt(fastapi, uvicorn), .gitignore(.venv·.env 제외)
+  - 정한 기준(PRD에 정의 없음): API 필드는 snake_case(due_date), id는 서버가 부여하는 정수,
+    title 1~100자·description 0~1000자. 자세한 내용은 API-SPEC.md.
+  - 실행 명령: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+    .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+  - 확인 결과(2026-10-13): curl http://127.0.0.1:8000/api/health → 200, {"status":"ok"}. /docs 200.
+  - 남은 오류: 없음
 - [ ] T06: 메모리 기반 /api/tasks GET과 POST.
   확인: /docs에서 등록 후 조회. 입력 위반은 422.
 - [ ] T07: PATCH·DELETE와 필터 구현.
