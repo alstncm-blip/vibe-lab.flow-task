@@ -65,8 +65,15 @@
   - 수정한 오류: due_date에 strict 모드를 쓰면 정상 날짜 "2026-10-20"도 422가 나와 문자열 형식 검사로 교체.
   - /docs 확인(사용자, 서버 로그로 확인): POST 201 두 건 등록 후 GET 200, 목록에 id 4·5 반영. 위반 입력 422.
   - 남은 오류: 없음
-- [ ] T07: PATCH·DELETE와 필터 구현.
+- [x] T07: PATCH·DELETE와 필터 구현.
   확인: 미전달 필드 유지, 없는 ID 404, 삭제 204.
+  - 변경 파일: backend/main.py
+  - 실행 명령: .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+  - 확인 결과(2026-10-13, curl): PATCH status만·title만·빈 본문 → 나머지 필드 유지(200), due_date null로 마감일 삭제,
+    요청의 id 무시, title·status null·공백 title·잘못된 값 → 422(항목 변경 없음), 없는 ID 404, 숫자 아닌 ID 422,
+    다른 항목 불변. 필터 status·priority·q(설명 포함)·조합·결과 없음 [], 잘못된 status 422.
+    DELETE 204(본문 없음), 같은 ID 재삭제·없는 ID 404, 삭제 후 등록 시 id 재사용 안 함.
+  - 남은 오류: 없음
 - [ ] T08: 프런트엔드 저장 처리를 API 호출로 교체.
   확인: 화면과 curl 목록이 같음. API 중지 시 오류 표시.
 ## 4장: DB

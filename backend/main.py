@@ -4,7 +4,7 @@ import re
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI, HTTPException, Response, status
 from pydantic import BaseModel, BeforeValidator, StringConstraints
 
 app = FastAPI(title="Task Flow API")
@@ -38,6 +38,20 @@ class TaskCreate(BaseModel):
     due_date: DueDate = None
 
 
+class TaskUpdate(BaseModel):
+    """PATCH /api/tasks/{id} 요청 본문. 보낸 필드만 바꾼다.
+
+    기본값 None은 "보내지 않음"을 뜻한다. due_date만 null을 보내 지울 수 있고,
+    나머지 필드에 null을 보내면 타입 검증에서 422가 된다.
+    """
+
+    title: Title = None
+    description: Description = None
+    status: Status = None
+    priority: Priority = None
+    due_date: DueDate = None
+
+
 class Task(BaseModel):
     id: int
     title: str
@@ -58,10 +72,28 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def find_task(task_id: int) -> Task:
+    for task in tasks:
+        if task.id == task_id:
+            return task
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+
 @app.get("/api/tasks")
-def list_tasks() -> list[Task]:
-    """할 일 목록을 등록 순서로 돌려준다."""
-    return tasks
+def list_tasks(
+    status: Status | None = None,
+    priority: Priority | None = None,
+    q: str | None = None,
+) -> list[Task]:
+    """할 일 목록을 등록 순서로 돌려준다. 조건을 함께 주면 모두 만족하는 항목만 돌려준다."""
+    keyword = (q or "").strip().lower()
+    return [
+        task
+        for task in tasks
+        if (status is None or task.status == status)
+        and (priority is None or task.priority == priority)
+        and (keyword == "" or keyword in task.title.lower() or keyword in task.description.lower())
+    ]
 
 
 @app.post("/api/tasks", status_code=status.HTTP_201_CREATED)
@@ -72,3 +104,21 @@ def create_task(payload: TaskCreate) -> Task:
     next_id += 1
     tasks.append(task)
     return task
+
+
+@app.patch("/api/tasks/{task_id}")
+def update_task(task_id: int, payload: TaskUpdate) -> Task:
+    """보낸 필드만 수정하고 보내지 않은 필드는 그대로 둔다."""
+    task = find_task(task_id)
+    changes = payload.model_dump(exclude_unset=True)
+    updated = task.model_copy(update=changes)
+    tasks[tasks.index(task)] = updated
+    return updated
+
+
+@app.delete("/api/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(task_id: int) -> Response:
+    """할 일을 삭제한다. 본문 없이 204를 돌려준다."""
+    task = find_task(task_id)
+    tasks.remove(task)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
