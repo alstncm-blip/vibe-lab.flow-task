@@ -43,6 +43,9 @@ function describeError(status, body) {
   if (status === 404) {
     return "이미 삭제된 할 일입니다. 목록을 새로 불러옵니다.";
   }
+  if (status === 503) {
+    return "API 서버가 DB에 연결할 수 없습니다. DB 서버 상태를 확인하세요.";
+  }
   if (status === 422 && Array.isArray(body?.detail)) {
     const fields = body.detail.map((item) => item.loc?.at(-1)).filter(Boolean);
     return `입력값을 확인하세요 (${[...new Set(fields)].join(", ")}).`;

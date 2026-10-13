@@ -106,8 +106,16 @@
   - 확인 결과(2026-10-13): 1회차 "tasks: 생성함", 2회차 "이미 있음(변경 없음)". SQL로 SHOW TABLES에 tasks,
     SHOW CREATE TABLE로 컬럼·제약·utf8mb4 확인, 행 0개. 잘못된 status INSERT는 CHECK 제약으로 거절(ERROR 4025).
   - 남은 오류: 없음
-- [ ] T11: API 메모리 저장을 DB로 교체.
+- [x] T11: API 메모리 저장을 DB로 교체.
   확인: 등록한 행을 SQL로 조회. API 재시작 후 데이터 유지.
+  - 변경 파일: backend/main.py(메모리 → SQLAlchemy 세션, DB 접속 실패 시 503), API-SPEC.md(503 추가),
+    frontend/app.js(503 안내 문구)
+  - 실행 명령: .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+  - 확인 결과(2026-10-13): T06·T07 curl 테스트 재실행 결과 동일(201·200·204·404·422, 미전달 필드 유지, 필터).
+    등록한 행을 SELECT * FROM tasks로 조회(한글·이모지 포함). API 서버 중지 후 재시작해도 목록 유지,
+    재시작 후 등록 id 4(삭제한 3 재사용 안 함). 검색어의 %·_는 글자 그대로 검색.
+    잘못된 DB 포트로 띄운 API(8001)는 /api/tasks 503, 로그에 비밀번호 없음.
+  - 남은 일: 화면의 503 안내 문구는 브라우저 미확인.
 ## 5장: 서버 분리
 - [ ] T12: DB 서버 구성 후 App 서버에서 SELECT 1 확인.
 - [ ] T13: App 서버 코드·가상환경·환경변수·systemd 구성.

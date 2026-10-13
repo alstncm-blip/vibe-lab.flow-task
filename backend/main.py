@@ -1,12 +1,23 @@
 """Task Flow API 서버. 명세는 API-SPEC.md를 따른다."""
 
+import logging
 import re
+from collections.abc import Iterator
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, BeforeValidator, StringConstraints
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, BeforeValidator, ConfigDict, StringConstraints
+from sqlalchemy import or_, select
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
+
+from backend.database import SessionLocal
+from backend.models import TaskRow
+
+logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title="Task Flow API")
 
@@ -63,6 +74,8 @@ class TaskUpdate(BaseModel):
 
 
 class Task(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     title: str
     description: str
@@ -71,9 +84,23 @@ class Task(BaseModel):
     due_date: date | None
 
 
-# T06: 메모리 저장소. 서버를 다시 시작하면 사라진다(T11에서 DB로 교체).
-tasks: list[Task] = []
-next_id = 1
+def get_db() -> Iterator[Session]:
+    """요청마다 DB 세션을 열고 끝나면 닫는다."""
+    with SessionLocal() as db:
+        yield db
+
+
+DB = Annotated[Session, Depends(get_db)]
+
+
+@app.exception_handler(OperationalError)
+def database_unavailable(request: Request, exc: OperationalError) -> JSONResponse:
+    """DB에 접속할 수 없으면 500 대신 503으로 알린다. 접속 정보는 응답에 넣지 않는다."""
+    logger.error("DB 접속 오류: %s", exc.orig)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "Database unavailable"},
+    )
 
 
 @app.get("/api/health")
@@ -82,53 +109,60 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-def find_task(task_id: int) -> Task:
-    for task in tasks:
-        if task.id == task_id:
-            return task
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+def find_task(db: Session, task_id: int) -> TaskRow:
+    row = db.get(TaskRow, task_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    return row
 
 
 @app.get("/api/tasks")
 def list_tasks(
+    db: DB,
     status: Status | None = None,
     priority: Priority | None = None,
     q: str | None = None,
 ) -> list[Task]:
     """할 일 목록을 등록 순서로 돌려준다. 조건을 함께 주면 모두 만족하는 항목만 돌려준다."""
-    keyword = (q or "").strip().lower()
-    return [
-        task
-        for task in tasks
-        if (status is None or task.status == status)
-        and (priority is None or task.priority == priority)
-        and (keyword == "" or keyword in task.title.lower() or keyword in task.description.lower())
-    ]
+    query = select(TaskRow).order_by(TaskRow.id)
+    if status is not None:
+        query = query.where(TaskRow.status == status)
+    if priority is not None:
+        query = query.where(TaskRow.priority == priority)
+    keyword = (q or "").strip()
+    if keyword != "":
+        # autoescape: 검색어의 %, _ 를 글자 그대로 찾는다. 대소문자 구분은 DB 콜레이션(_ci)이 없앤다.
+        query = query.where(
+            or_(TaskRow.title.contains(keyword, autoescape=True), TaskRow.description.contains(keyword, autoescape=True))
+        )
+    return db.scalars(query).all()
 
 
 @app.post("/api/tasks", status_code=status.HTTP_201_CREATED)
-def create_task(payload: TaskCreate) -> Task:
-    """할 일을 등록한다. id는 서버가 부여한다."""
-    global next_id
-    task = Task(id=next_id, **payload.model_dump())
-    next_id += 1
-    tasks.append(task)
-    return task
+def create_task(payload: TaskCreate, db: DB) -> Task:
+    """할 일을 등록한다. id는 DB(AUTO_INCREMENT)가 부여한다."""
+    row = TaskRow(**payload.model_dump())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 @app.patch("/api/tasks/{task_id}")
-def update_task(task_id: int, payload: TaskUpdate) -> Task:
+def update_task(task_id: int, payload: TaskUpdate, db: DB) -> Task:
     """보낸 필드만 수정하고 보내지 않은 필드는 그대로 둔다."""
-    task = find_task(task_id)
-    changes = payload.model_dump(exclude_unset=True)
-    updated = task.model_copy(update=changes)
-    tasks[tasks.index(task)] = updated
-    return updated
+    row = find_task(db, task_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 @app.delete("/api/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_task(task_id: int) -> Response:
+def delete_task(task_id: int, db: DB) -> Response:
     """할 일을 삭제한다. 본문 없이 204를 돌려준다."""
-    task = find_task(task_id)
-    tasks.remove(task)
+    row = find_task(db, task_id)
+    db.delete(row)
+    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

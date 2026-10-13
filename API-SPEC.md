@@ -131,6 +131,13 @@ FastAPI 기본 형식을 따른다.
 { "detail": "Task not found" }
 ```
 
+- `503 Service Unavailable`: API 서버가 DB에 접속할 수 없을 때(T11~). 모든 `/api/tasks` 요청에 해당한다.
+  `/api/health`는 DB를 확인하지 않는다.
+
+```json
+{ "detail": "Database unavailable" }
+```
+
 - `422 Unprocessable Entity`: `detail`에 위반한 필드와 이유가 배열로 들어간다.
 
 ```json
