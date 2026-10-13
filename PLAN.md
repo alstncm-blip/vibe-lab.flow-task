@@ -128,5 +128,11 @@ T01~T04: python3 -m http.server 5500 --bind 127.0.0.1 --directory frontend
 T05~T11: 가상환경에서 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 실제 존재하는 파일을 확인한 뒤 명령을 실행한다.
 ## 기록
+### 계획 외 변경
+- 2026-10-13 FastAPI가 frontend/ 정적 파일도 제공(ngrok으로 한 포트만 공개하기 위해, 사용자 요청).
+  변경 파일: backend/main.py(StaticFiles를 "/"에 마지막으로 등록). 화면 코드는 그대로(8000번에서 열면 /api 사용).
+  확인(curl): /, /app.js, /styles.css 200, /api/health·/api/tasks 200, /docs 200, 없는 경로 404,
+  /../.env 등 frontend 밖 경로 404(.env 노출 없음). 5500번 정적 서버도 계속 사용 가능.
+  T14에서 Nginx가 정적 파일을 제공하면 이 기능은 쓰지 않아도 된다.
 각 작업에 변경 파일, 실행 명령, 실제 확인 결과, 남은 오류를 기록한다.
 정상 동작을 확인한 작업 단위로 Git 커밋한다.

@@ -4,11 +4,13 @@ import logging
 import re
 from collections.abc import Iterator
 from datetime import date
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, BeforeValidator, ConfigDict, StringConstraints
 from sqlalchemy import or_, select
 from sqlalchemy.exc import OperationalError
@@ -18,6 +20,8 @@ from backend.database import SessionLocal
 from backend.models import TaskRow
 
 logger = logging.getLogger("uvicorn.error")
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 app = FastAPI(title="Task Flow API")
 
@@ -166,3 +170,8 @@ def delete_task(task_id: int, db: DB) -> Response:
     db.delete(row)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# 화면 파일(index.html, app.js, styles.css)도 같은 주소에서 제공한다(예: ngrok으로 8000번 하나만 공개).
+# 위의 /api 경로가 먼저 처리되도록 맨 마지막에 등록한다.
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
