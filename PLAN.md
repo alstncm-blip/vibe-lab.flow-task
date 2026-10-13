@@ -54,8 +54,17 @@
     .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
   - 확인 결과(2026-10-13): curl http://127.0.0.1:8000/api/health → 200, {"status":"ok"}. /docs 200.
   - 남은 오류: 없음
-- [ ] T06: 메모리 기반 /api/tasks GET과 POST.
+- [x] T06: 메모리 기반 /api/tasks GET과 POST.
   확인: /docs에서 등록 후 조회. 입력 위반은 422.
+  - 변경 파일: backend/main.py
+  - 실행 명령: .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+  - 확인 결과(2026-10-13, curl): 빈 목록 [] 200. 제목만·전체 필드 등록 201(앞뒤 공백 제거, 기본값 적용,
+    요청의 id 무시, id 1부터 증가), 등록 후 GET에 반영. title 없음·빈 값·공백·101자, description 1001자,
+    허용되지 않은 status·priority, 날짜 형식 위반(2026/10/20, 2026-02-30, 숫자, 시간 포함), JSON 아님 → 422.
+    서버 재시작(--reload) 후 목록이 비는 것 확인(메모리 저장).
+  - 수정한 오류: due_date에 strict 모드를 쓰면 정상 날짜 "2026-10-20"도 422가 나와 문자열 형식 검사로 교체.
+  - /docs 확인(사용자, 서버 로그로 확인): POST 201 두 건 등록 후 GET 200, 목록에 id 4·5 반영. 위반 입력 422.
+  - 남은 오류: 없음
 - [ ] T07: PATCH·DELETE와 필터 구현.
   확인: 미전달 필드 유지, 없는 ID 404, 삭제 204.
 - [ ] T08: 프런트엔드 저장 처리를 API 호출로 교체.
